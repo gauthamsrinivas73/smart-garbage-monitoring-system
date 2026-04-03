@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Smart Garbage Monitoring</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <style>
+    body { margin:0; font-family:Arial; }
+    #map { height:100vh; width:100%; }
+
+    #dashboard {
+      position: absolute;
+      left: -250px;
+      top: 0;
+      width: 250px;
+      height: 100%;
+      background: #222;
+      color: white;
+      padding: 15px;
+      transition: 0.3s;
+      z-index: 1000;
+    }
+
+    #dashboard.active { left: 0; }
+
+    #toggle {
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      background: #222;
+      color: white;
+      padding: 8px;
+      cursor: pointer;
+      border-radius: 0 5px 5px 0;
+      z-index: 1100;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 10px;
+      padding: 8px;
+      border: none;
+      background: #444;
+      color: white;
+      cursor: pointer;
+    }
+
+    #popup {
+      display: none;
+      position: absolute;
+      top: 30%;
+      left: 40%;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      z-index: 2000;
+    }
+
+    #popup input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="toggle">❯</div>
+
+<div id="dashboard">
+  <h3>Dashboard</h3>
+  <p>Total: <span id="total"></span></p>
+  <p>Green: <span id="green"></span></p>
+  <p>Yellow: <span id="yellow"></span></p>
+  <p>Red: <span id="red"></span></p>
+
+  <button onclick="addBin()">Add Bin</button>
+  <button onclick="removeBin()">Remove Bin</button>
+  <button onclick="openPopup()">Send Notification</button>
+</div>
+
+<div id="popup">
+  <h3>Send Notification</h3>
+  <input type="text" id="binName" placeholder="Enter Bin Name">
+  <button onclick="sendNotification()">Send</button>
+</div>
+
+<div id="map"></div>
+
+<script>
+
+// 🔥 Firebase
+var firebaseConfig = {
+  databaseURL: "https://smart-garbage-monitering-bd1c4-default-rtdb.asia-southeast1.firebasedatabase.app/"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
+
+// 🗺️ Map
+var map = L.map('map').setView([13.0827, 80.2707], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+// 📍 Bins
+var bins = [
+  {name:"Bin 1", lat:13.08, lng:80.27, level:20},
+  {name:"Bin 2", lat:13.07, lng:80.25, level:60},
+  {name:"Bin 3", lat:13.09, lng:80.28, level:90},
+  {name:"Bin SIST", lat:12.8720295, lng:80.2200118, level:0} // UPDATED LOCATION
+];
+
+var markers = [];
+
+// 🎨 Color
+function getColor(l){
+  if(l>=80) return "red";
+  else if(l>=40) return "orange";
+  else return "green";
+}
+
+// 🔄 Draw markers
+function loadMarkers(){
+
+  markers.forEach(m=>map.removeLayer(m));
+  markers=[];
+
+  let g=0,y=0,r=0;
+
+  bins.forEach((b)=>{
+
+    let color = getColor(b.level);
+
+    if(color=="green") g++;
+    else if(color=="orange") y++;
+    else r++;
+
+    var icon = L.divIcon({
+      className:'',
+      html:`<div style="
+        width:20px;
+        height:20px;
+        background:${color};
+        border:3px solid white;
+      "></div>`
+    });
+
+    let m = L.marker([b.lat,b.lng],{icon}).addTo(map);
+
+    m.bindPopup(
+      "Name: "+b.name+"<br>"+
+      "Level: "+b.level+"%<br>"+
+      "Lat: "+b.lat+"<br>"+
+      "Lng: "+b.lng
+    );
+
+    markers.push(m);
+  });
+
+  document.getElementById("total").innerText=bins.length;
+  document.getElementById("green").innerText=g;
+  document.getElementById("yellow").innerText=y;
+  document.getElementById("red").innerText=r;
+}
+
+// 🔥 Firebase live update
+db.ref("bin1/level").on("value", snap=>{
+  if(snap.val()!=null){
+    bins[3].level = snap.val();
+    loadMarkers();
+  }
+});
+
+// ➕ ADD BIN (UPDATED)
+function addBin(){
+
+  let name = prompt("Enter Bin Name:");
+  let lat = parseFloat(prompt("Enter Latitude:"));
+  let lng = parseFloat(prompt("Enter Longitude:"));
+
+  if(!name || isNaN(lat) || isNaN(lng)){
+    alert("Invalid input!");
+    return;
+  }
+
+  bins.push({name:name, lat:lat, lng:lng, level:30});
+  loadMarkers();
+}
+
+// ➖ REMOVE BIN
+function removeBin(){
+  bins.pop();
+  loadMarkers();
+}
+
+// 🔔 Notification
+function openPopup(){
+  document.getElementById("popup").style.display="block";
+}
+
+function sendNotification(){
+  let name=document.getElementById("binName").value;
+  alert("Notification sent for "+name);
+  document.getElementById("popup").style.display="none";
+}
+
+// 🎯 Toggle dashboard
+document.getElementById("toggle").onclick=function(){
+  document.getElementById("dashboard").classList.toggle("active");
+};
+
+// INIT
+loadMarkers();
+
+</script>
+
+</body>
+</html>
